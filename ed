@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+
+source .env 2> /dev/null
+
+TERM=xterm-256color
+
+GREEN_BOLD="\e[1;32m"
+GREEN="\e[32m"
+BLUE_BOLD="\e[1;34m"
+BLUE="\e[34m"
+YELLOW_BOLD="\e[1;33m"
+YELLOW="\e[0;33m"
+WHITE_BOLD="\e[1;97m"
+ENDCOLOR="\e[0m"
+
+COMMAND=$1
+arg2=$2
+args="${*:2}"
+
+dc="docker compose -p ${APP_NAME} ${args}"
+dcc="docker compose -p ${APP_NAME}"
+
+php="php"
+db="db"
+db_testing="db_testing"
+cache="cache"
+
+ADDRESS=${DOCKER_ADDRESS} || 'localhost'
+
+case ${COMMAND} in
+  init)
+    echo "Choose your OS:"
+    select name in "win" "linux" "macos" ;
+    do
+      case ${name} in
+        win|macos)
+          cp -n ./docker/docker-compose.example.yml docker-compose.yml
+          cp -n .env.example .env
+          cp -n .env.testing.example .env.testing
+        ;;
+
+        linux)
+          cp --update=none ./docker/docker-compose.example.yml docker-compose.yml
+          cp --update=none .env.example .env
+          cp --update=none .env.testing.example .env.testing
+        ;;
+
+      esac
+    break
+    done
+    echo "Configuration done."
+  ;;
+
+  build)
+    sudo chmod 777 -R .
+    ${dc} up --build --force-recreate
+  ;;
+
+  rebuild)
+    sudo chmod 777 -R .
+    ${dc} up -d --build --force-recreate --no-deps ${arg2}
+  ;;
+
+  start)
+    ${dc} start
+    echo "Server started"
+  ;;
+
+  stop)
+    ${dc} stop
+  ;;
+
+  down)
+    ${dc} down
+  ;;
+
+  logs)
+    ${dc} logs -f
+  ;;
+
+  ps)
+    ${dc} ps
+  ;;
+
+  restart)
+    ${dc} restart
+    echo "Server started"
+  ;;
+
+  php)
+    ${dc} exec ${php} bash
+  ;;
+
+  db)
+    ${dc} exec ${db} bash
+  ;;
+
+  db_testing)
+    ${dc} exec ${db_testing} bash
+  ;;
+
+  cache)
+    ${dc} exec ${cache} bash
+  ;;
+
+esac

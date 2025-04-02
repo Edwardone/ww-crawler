@@ -1,0 +1,175 @@
+services:
+
+  base:
+    build:
+      context: ./
+      dockerfile: docker/conf/php/DockerfileBase
+    container_name: ${APP_NAME}_php_base
+    hostname: ${APP_NAME}_php_base
+    working_dir: /app
+    volumes:
+      - ./:/app/
+      - ./storage/framework/tmp:/tmp
+      - ./docker/conf/php/.bashrc:/root/.bashrc
+      - ./docker/conf/php/.bash_aliases:/root/.bash_aliases
+    environment:
+      TERM: xterm-256color
+      COMPOSER_ALLOW_SUPERUSER: 1
+    entrypoint: ["/bin/bash"]
+
+  web:
+    image: webdevops/nginx:alpine
+    container_name: ${APP_NAME}_web
+    hostname: ${APP_NAME}_web
+    ports:
+      - ${DOCKER_ADDRESS}:80:80
+      - ${DOCKER_ADDRESS}:443:443
+    environment:
+      WEB_DOCUMENT_ROOT: /app/public
+      WEB_PHP_SOCKET: ${APP_NAME}_php:9000
+      LOG_STDOUT: /app/storage/logs/web.access.log
+      LOG_STDERR: /app/storage/logs/web.errors.log
+    volumes:
+      - ./:/app
+    working_dir: /app
+    depends_on:
+      - php
+
+  php:
+    build:
+      context: ./
+      dockerfile: docker/conf/php/Dockerfile
+    container_name: ${APP_NAME}_php
+    hostname: ${APP_NAME}_php
+    working_dir: /app
+    volumes:
+      - ./:/app/
+      - ./storage/framework/tmp:/tmp
+      - ./docker/conf/php/.bashrc:/root/.bashrc
+      - ./docker/conf/php/.bash_aliases:/root/.bash_aliases
+    environment:
+      TERM: xterm-256color
+      COMPOSER_ALLOW_SUPERUSER: 1
+    ports:
+      - ${DOCKER_ADDRESS}:6001:6001
+      - ${DOCKER_ADDRESS}:8000:8000
+    depends_on:
+      - base
+      - db
+      - db_testing
+      - cache
+    entrypoint: [ "/bin/bash", "/app/docker/bin/php_start.sh" ]
+
+  php_xdebug:
+    build:
+      context: ./
+      dockerfile: docker/conf/php/DockerfileXdebug
+    container_name: ${APP_NAME}_php_xdebug
+    hostname: ${APP_NAME}_php_xdebug
+    working_dir: /app
+    volumes:
+      - ./:/app/
+      - ./storage/framework/tmp:/tmp
+      - ./docker/conf/php/.bashrc:/root/.bashrc
+      - ./docker/conf/php/.bash_aliases:/root/.bash_aliases
+    environment:
+      TERM: xterm-256color
+      COMPOSER_ALLOW_SUPERUSER: 1
+      XDEBUG_CONFIG: "client_host=${DOCKER_ADDRESS}"
+      PHP_IDE_CONFIG: "serverName=${APP_NAME}"
+    ports:
+      - ${DOCKER_ADDRESS}:6002:6001
+      - ${DOCKER_ADDRESS}:8001:8000
+    depends_on:
+      - php
+    entrypoint: ["/bin/bash", "/app/docker/bin/php_start.sh"]
+
+  db:
+    image: postgres:14-alpine
+    container_name: ${APP_NAME}_db
+    ports:
+      - ${DOCKER_ADDRESS}:${DB_PORT}:${DB_PORT}
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./storage/pgsql/:/var/lib/postgresql/data/
+
+  db_testing:
+    image: postgres:14-alpine
+    container_name: ${APP_NAME}_db_testing
+    ports:
+      - ${DOCKER_ADDRESS}:5433:${DB_PORT}
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  cache:
+    image: nbtri/alpine-redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    container_name: ${APP_NAME}_cache
+    hostname: ${APP_NAME}_cache
+    ports:
+      - ${DOCKER_ADDRESS}:${REDIS_PORT}:${REDIS_PORT}
+
+  mailer:
+    image: mailhog/mailhog
+    container_name: ${APP_NAME}_mailer
+    hostname: ${APP_NAME}_mailer
+    ports:
+      - ${DOCKER_ADDRESS}:8025:8025
+      - ${DOCKER_ADDRESS}:1025:1025
+
+  opensearch_node1:
+    image: opensearchproject/opensearch:latest
+    container_name: ${APP_NAME}_opensearch_node1
+    environment:
+      - cluster.name=${APP_NAME}_opensearch_cluster
+      - node.name=${APP_NAME}_opensearch_node1
+      - discovery.seed_hosts=${APP_NAME}_opensearch_node1
+      - cluster.initial_cluster_manager_nodes=${APP_NAME}_opensearch_node1
+      - bootstrap.memory_lock=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - ./storage/opensearch/node1/:/var/lib/opensearch/data
+    ports:
+      - 9200:9200
+      - 9600:9600
+    networks:
+      - opensearch-net
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:latest
+    container_name: ${APP_NAME}_opensearch_dashboards
+    ports:
+      - 5601:5601
+    expose:
+      - '5601'
+    environment:
+      - 'OPENSEARCH_HOSTS=["http://${DOCKER_ADDRESS}:9200"]'
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+    networks:
+      - opensearch-net
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DOCKER_NETWORK}
+
+  opensearch-net:

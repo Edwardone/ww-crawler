@@ -1,0 +1,34 @@
+# Testing
+/.phpunit.cache
+.phpunit.result.cache
+coverage.xml
+
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/coverage
+/storage/media-library
+/vendor
+.env
+.env.backup
+.env.production
+.env.testing
+
+.phpstorm.meta.php
+_ide_helper.php
+_ide_helper_models.php
+/.fleet
+/.idea
+/.vscode
+
+# Docker
+docker-compose.yml
+/storage/pgsql
+/storage/mysql
+/storage/opensearch
+
+# GraphQL
+_lighthouse_ide_helper.php
+programmatic-types.graphql
+schema-directives.graphql
